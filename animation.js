@@ -204,18 +204,21 @@ function animate() {
 /**
  * Зчитування та відображення логів з LocalStorage (Клієнтський лог)
  */
+/**
+ * Зчитування та відображення логів з LocalStorage (Клієнтський лог)
+ */
 function displayLogs() {
     // 1. Отримання логів з LocalStorage
     const storedLogs = localStorage.getItem('animation_logs');
     
-    // Якщо логів немає, перевіряємо, чи є логи в поточному сеансі (localEvents)
     let logsArray;
 
     try {
         logsArray = storedLogs ? JSON.parse(storedLogs) : localEvents;
     } catch (e) {
+        // Обробка пошкодженого JSON
         console.error("Помилка JSON при зчитуванні логів:", e);
-        logsArray = localEvents; // Використовуємо логи поточної сесії, якщо сховище пошкоджене
+        logsArray = localEvents;
     }
     
     logsOutput.innerHTML = '<h3>Протокол подій (Клієнтський лог)</h3>';
@@ -225,17 +228,16 @@ function displayLogs() {
         return;
     }
 
-    // Фільтруємо null/undefined елементи
+    // Фільтруємо null/undefined елементи у масиві
     logsArray = logsArray.filter(log => log !== null && typeof log === 'object');
 
 
     let tableHTML = '<table><thead><tr><th>Подія #</th><th>Тип</th><th>Лок. час</th><th>Повідомлення</th></tr></thead><tbody>';
 
     logsArray.forEach(log => {
-        // *** ВИПРАВЛЕННЯ: Головна перевірка на існування log та log.local_time ***
+        // *** ВИПРАВЛЕННЯ: Додаємо перевірку на log та log.local_time ***
         if (log && log.local_time) {
-            // Очікувані поля: log_type, sequence, local_time, server_time, message
-            // Використовуємо повний час (log.local_time), оскільки він вже у форматі "HH:MM:SS.ms"
+            // ВИПРАВЛЕННЯ: Використовуємо повний час, уникаючи помилки substring
             const timeDisplay = log.local_time; 
             
             tableHTML += `<tr>
@@ -245,7 +247,7 @@ function displayLogs() {
                 <td>${log.message}</td>
             </tr>`;
         } else {
-            // Це обробник для пошкоджених записів, які викликали помилку
+            // Якщо запис пошкоджений, виводимо рядок з попередженням
             console.warn("Пропущено пошкоджений або неповний запис логу:", log);
             tableHTML += `<tr><td colspan="4" style="color: red; font-style: italic;">[Пошкоджений запис логу]</td></tr>`;
         }
@@ -254,7 +256,6 @@ function displayLogs() {
     tableHTML += '</tbody></table>';
     logsOutput.innerHTML += tableHTML;
 }
-
 
 // --- Обробники кнопок ---
 
@@ -334,3 +335,4 @@ document.addEventListener('DOMContentLoaded', () => {
     // Початкова ініціалізація позицій квадратів
     initSquares();
 });
+
