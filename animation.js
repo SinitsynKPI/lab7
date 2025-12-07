@@ -25,10 +25,9 @@ let orangePos = { x: 0, y: 0 };
 let blueVel = { x: 2.2, y: 1.6 };
 let orangeVel = { x: -1.8, y: -1.3 };
 
-// --- ЗМІНЕНО: Логування подій для GitHub Pages (тільки LocalStorage) ---
+// --- ЛОГУВАННЯ ДЛЯ GITHUB PAGES (Тільки LocalStorage) ---
 let localEvents = []; // Акумулятор для LocalStorage
 const MAX_LOG_SIZE = 1500; // Ліміт для уникнення переповнення LocalStorage
-// LOG_FILE_PATH більше не використовується
 // -------------------------------------------------------------------
 
 /**
@@ -202,11 +201,6 @@ function animate() {
     }, animationInterval);
 }
 
-
-// --- Функції логування та відображення ---
-
-// Функція sendFinalLogs() ВИДАЛЕНА, оскільки всі логи вже зберігаються в LocalStorage.
-
 /**
  * Зчитування та відображення логів з LocalStorage (Клієнтський лог)
  */
@@ -228,7 +222,6 @@ function displayLogs() {
 
     logsArray.forEach(log => {
         // Очікувані поля: log_type, sequence, local_time, server_time, message
-        // server_time більше не відображається, оскільки він N/A
         tableHTML += `<tr>
             <td>${log.sequence}</td>
             <td>${log.log_type}</td>
@@ -260,8 +253,6 @@ closeButton.addEventListener('click', () => {
     isAnimating = false;
     cancelAnimationFrame(animationFrameId);
 
-    // sendFinalLogs() ВИДАЛЕНО
-    
     // Відображення логів
     displayLogs();
 });
