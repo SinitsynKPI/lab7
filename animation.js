@@ -1,4 +1,4 @@
-﻿// animation.js
+// animation.js
 
 const work = document.getElementById('work');
 const anim = document.getElementById('anim');
@@ -25,9 +25,11 @@ let orangePos = { x: 0, y: 0 };
 let blueVel = { x: 2.2, y: 1.6 };
 let orangeVel = { x: -1.8, y: -1.3 };
 
-// Логування подій
-let localEvents = []; // Акумулятор для LocalStorage (Спосіб 2)
-const LOG_FILE_PATH = 'log_event.php'; // Шлях до PHP-скрипта
+// --- ЗМІНЕНО: Логування подій для GitHub Pages (тільки LocalStorage) ---
+let localEvents = []; // Акумулятор для LocalStorage
+const MAX_LOG_SIZE = 1500; // Ліміт для уникнення переповнення LocalStorage
+// LOG_FILE_PATH більше не використовується
+// -------------------------------------------------------------------
 
 /**
  * Отримання поточного часу з мілісекундами
@@ -42,43 +44,37 @@ function getCurrentTime() {
 }
 
 /**
- * Логує подію обома способами: 
- * 1. Негайне відправлення на сервер (Спосіб 1)
- * 2. Акумуляція в LocalStorage (Спосіб 2)
+ * Логує подію безпосередньо у LocalStorage, замінюючи серверне логування.
  */
 function logEvent(message) {
     eventSequence++;
     const localTime = getCurrentTime();
     messageDisplay.textContent = `${eventSequence}: ${message}`;
 
-    const eventData = {
-        seq: eventSequence,
-        localTime: localTime,
+    const logData = {
+        log_type: 'IMMEDIATE', // Всі логи тепер Immediate (клієнтські)
+        sequence: eventSequence,
+        local_time: localTime,
+        server_time: 'N/A', // Немає доступу до серверного часу
         message: message,
     };
 
-    // --- Спосіб 1: Негайне відправлення на сервер (пункт b) ---
-    fetch(LOG_FILE_PATH, {
-        method: 'POST',
-        headers: {
-            // Додавати charset=utf-8 тут не обов'язково, але не завадить
-            'Content-Type': 'application/x-www-form-urlencoded; charset=utf-8',
-        },
-        // !!! ВИПРАВЛЕНО !!!: Використання encodeURIComponent для безпечної передачі JSON
-        body: `event=${encodeURIComponent(JSON.stringify(eventData))}&type=immediate`
-    })
-        .then(response => response.json())
-        .then(data => {
-            // console.log(`Event ${eventData.seq} saved on server at: ${data.serverTime}`);
-        })
-        .catch(error => {
-            console.error('Error logging immediate event:', error);
-        });
+    localEvents.push(logData);
 
-    // --- Спосіб 2: Акумуляція в LocalStorage (пункт c) ---
-    localEvents.push(eventData);
-    // Зберігаємо поточний акумулятор у LocalStorage
-    localStorage.setItem('animation_logs', JSON.stringify(localEvents));
+    // Обмеження розміру логу
+    if (localEvents.length > MAX_LOG_SIZE) {
+        // Залишаємо лише останні MAX_LOG_SIZE логів
+        localEvents = localEvents.slice(localEvents.length - MAX_LOG_SIZE); 
+    }
+
+    // Запис у LocalStorage
+    try {
+        localStorage.setItem('animation_logs', JSON.stringify(localEvents));
+    } catch (e) {
+        console.error("Помилка LocalStorage при записі логів:", e);
+        // Додамо попередження на екран, якщо сховище переповнене
+        messageDisplay.textContent = 'УВАГА: LocalStorage переповнене. Логування призупинено.';
+    }
 }
 
 /**
@@ -209,80 +205,40 @@ function animate() {
 
 // --- Функції логування та відображення ---
 
-/**
- * Спосіб 2: Відправлення акумульованих логів на сервер при закритті (пункт c, h)
- */
-function sendFinalLogs() {
-    const logs = localStorage.getItem('animation_logs');
-    if (logs && localEvents.length > 0) {
-        // Надсилаємо батч акумульованих логів
-        fetch(LOG_FILE_PATH, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded; charset=utf-8',
-            },
-            // !!! ВИПРАВЛЕНО !!!: Використання encodeURIComponent для безпечної передачі JSON
-            body: `event=${encodeURIComponent(logs)}&type=final`
-        })
-            .then(response => response.json())
-            .then(data => {
-                console.log('Final logs batch sent to server.');
-                // Очищення LocalStorage після успішної відправки
-                localStorage.removeItem('animation_logs');
-                localEvents = [];
-            })
-            .catch(error => {
-                console.error('Error sending final logs batch:', error);
-            });
-    }
-}
+// Функція sendFinalLogs() ВИДАЛЕНА, оскільки всі логи вже зберігаються в LocalStorage.
 
 /**
- * Зчитування та відображення логів із сервера (Спосіб 1 та 2) (пункт h)
+ * Зчитування та відображення логів з LocalStorage (Клієнтський лог)
  */
 function displayLogs() {
-    // 1. Читання логів із сервера (лог-файл `server_events.log`)
-    logsOutput.innerHTML = '<h3>Отримання логів із сервера...</h3>';
+    // 1. Отримання логів з LocalStorage
+    const storedLogs = localStorage.getItem('animation_logs');
+    
+    // Якщо логів немає, перевіряємо, чи є логи в поточному сеансі (localEvents)
+    const logsArray = storedLogs ? JSON.parse(storedLogs) : localEvents;
+    
+    logsOutput.innerHTML = '<h3>Протокол подій (Клієнтський лог)</h3>';
 
-    // Додаємо заголовок Accept для забезпечення UTF-8
-    fetch(LOG_FILE_PATH, {
-        method: 'GET',
-        headers: {
-            'Accept': 'text/plain; charset=utf-8'
-        }
-    })
-        .then(response => response.text())
-        .then(serverLogContent => {
+    if (logsArray.length === 0) {
+        logsOutput.innerHTML += '<p>Логи відсутні.</p>';
+        return;
+    }
 
-            let tableHTML = '<h3>Протокол подій (Серверний лог)</h3>';
-            tableHTML += '<table><thead><tr><th>Подія #</th><th>Повідомлення</th><th>Лок. час (JS)</th><th>Серв. час (PHP)</th><th>Спосіб</th></tr></thead><tbody>';
+    let tableHTML = '<table><thead><tr><th>Подія #</th><th>Тип</th><th>Лок. час</th><th>Повідомлення</th></tr></thead><tbody>';
 
-            // Парсинг серверних логів
-            const serverLogs = serverLogContent.split('\n').filter(line => line.length > 0 && line.includes('|'));
+    logsArray.forEach(log => {
+        // Очікувані поля: log_type, sequence, local_time, server_time, message
+        // server_time більше не відображається, оскільки він N/A
+        tableHTML += `<tr>
+            <td>${log.sequence}</td>
+            <td>${log.log_type}</td>
+            <td>${log.local_time.substring(11, 23)}</td>
+            <td>${log.message}</td>
+        </tr>`;
+    });
 
-            serverLogs.forEach(line => {
-                const parts = line.split('|');
-                // Очікуваний формат: TYPE|SEQ|LOCAL_TIME|SERVER_TIME|MESSAGE
-                if (parts.length >= 5) {
-                    const type = parts[0];
-                    const seq = parts[1];
-                    const localTime = parts[2];
-                    const serverTime = parts[3];
-                    const message = parts[4];
-
-                    const displayType = type === 'IMMEDIATE' ? 'Негайний (1)' : 'Кінцевий (2)';
-
-                    tableHTML += `<tr><td>${seq}</td><td>${message}</td><td>${localTime}</td><td>${serverTime}</td><td>${displayType}</td></tr>`;
-                }
-            });
-
-            tableHTML += '</tbody></table>';
-            logsOutput.innerHTML = tableHTML;
-        })
-        .catch(error => {
-            logsOutput.innerHTML = '<p style="color: red;">Помилка зчитування логів із сервера. (Перевірте консоль браузера)</p>';
-            console.error('Error fetching logs:', error);
-        });
+    tableHTML += '</tbody></table>';
+    logsOutput.innerHTML = tableHTML;
 }
 
 
@@ -304,11 +260,8 @@ closeButton.addEventListener('click', () => {
     isAnimating = false;
     cancelAnimationFrame(animationFrameId);
 
-    logEvent('Натиснута кнопка "close"');
-
-    // Спосіб 2: Відправлення акумульованих логів
-    sendFinalLogs();
-
+    // sendFinalLogs() ВИДАЛЕНО
+    
     // Відображення логів
     displayLogs();
 });
@@ -355,6 +308,5 @@ document.addEventListener('DOMContentLoaded', () => {
         eventSequence = localEvents.length;
     }
     // Початкова ініціалізація позицій квадратів, навіть якщо work прихований
-    // Це забезпечує коректні розміри при першому виклику 'play'
     initSquares();
 });
