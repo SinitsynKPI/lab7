@@ -204,16 +204,19 @@ function animate() {
 /**
  * Зчитування та відображення логів з LocalStorage (Клієнтський лог)
  */
+/**
+ * Зчитування та відображення логів з LocalStorage (Клієнтський лог)
+ */
 function displayLogs() {
     // 1. Отримання логів з LocalStorage
     const storedLogs = localStorage.getItem('animation_logs');
-    
+
     // Якщо логів немає, перевіряємо, чи є логи в поточному сеансі (localEvents)
     const logsArray = storedLogs ? JSON.parse(storedLogs) : localEvents;
-    
+
     logsOutput.innerHTML = '<h3>Протокол подій (Клієнтський лог)</h3>';
 
-    if (logsArray.length === 0) {
+    if (!logsArray || logsArray.length === 0) {
         logsOutput.innerHTML += '<p>Логи відсутні.</p>';
         return;
     }
@@ -221,17 +224,26 @@ function displayLogs() {
     let tableHTML = '<table><thead><tr><th>Подія #</th><th>Тип</th><th>Лок. час</th><th>Повідомлення</th></tr></thead><tbody>';
 
     logsArray.forEach(log => {
-        // Очікувані поля: log_type, sequence, local_time, server_time, message
-        tableHTML += `<tr>
-            <td>${log.sequence}</td>
-            <td>${log.log_type}</td>
-            <td>${log.local_time.substring(11, 23)}</td>
-            <td>${log.message}</td>
-        </tr>`;
+        // --- ВИПРАВЛЕННЯ: Додаємо перевірку на log та log.local_time ---
+        if (log && log.local_time) {
+            // Очікувані поля: log_type, sequence, local_time, server_time, message
+            // Якщо local_time має очікуваний формат "HH:MM:SS.ms", то його довжина >= 12
+            const timeDisplay = log.local_time.length >= 23 ? log.local_time.substring(11, 23) : log.local_time;
+
+            tableHTML += `<tr>
+                <td>${log.sequence}</td>
+                <td>${log.log_type}</td>
+                <td>${timeDisplay}</td>
+                <td>${log.message}</td>
+            </tr>`;
+        } else {
+            // Можна додати запис про пошкоджений лог для діагностики
+             console.warn("Пропущено пошкоджений або неповний запис логу:", log);
+        }
     });
 
     tableHTML += '</tbody></table>';
-    logsOutput.innerHTML = tableHTML;
+    logsOutput.innerHTML += tableHTML; // Змінено на += щоб не перезатирати h3
 }
 
 
@@ -301,3 +313,4 @@ document.addEventListener('DOMContentLoaded', () => {
     // Початкова ініціалізація позицій квадратів, навіть якщо work прихований
     initSquares();
 });
+
