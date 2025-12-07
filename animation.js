@@ -84,8 +84,10 @@ function initSquares() {
 
     // Перевірка, чи область 'anim' має коректні розміри
     if (animWidth <= 0 || animHeight <= 0) {
-        console.warn("Anim area dimensions are zero or invalid. Cannot initialize squares.");
-        return;
+        // Залишаємо попередження, але тепер воно не заблокує ініціалізацію, якщо work ще display: none
+        console.warn("Anim area dimensions are zero or invalid. Cannot initialize squares."); 
+        // Якщо work прихований, ці позиції будуть оновлені, коли work стане видимим
+        if (work.style.display !== 'block') return;
     }
 
     // Синій квадрат: біля правої стінки, випадкова вертикальна координата
@@ -132,8 +134,7 @@ function animate() {
     orangePos.x += orangeVel.x;
     orangePos.y += orangeVel.y;
 
-    // Log кожне зміщення (крок) (пункт h)
-    // Зверніть увагу: це може генерувати дуже багато логів, краще логувати лише зіткнення та зміни стану.
+    // Log кожне зміщення (крок) (пункт h) - закоментовано, щоб уникнути переповнення логу
     // logEvent('Крок/зміщення квадратів'); 
 
     // 2. Дотик до стінок (зміна напрямку) (пункт f)
@@ -208,32 +209,33 @@ function displayLogs() {
     const storedLogs = localStorage.getItem('animation_logs');
     
     // Якщо логів немає, перевіряємо, чи є логи в поточному сеансі (localEvents)
-    let logsArray = storedLogs ? JSON.parse(storedLogs) : localEvents;
+    let logsArray;
+
+    try {
+        logsArray = storedLogs ? JSON.parse(storedLogs) : localEvents;
+    } catch (e) {
+        console.error("Помилка JSON при зчитуванні логів:", e);
+        logsArray = localEvents; // Використовуємо логи поточної сесії, якщо сховище пошкоджене
+    }
     
     logsOutput.innerHTML = '<h3>Протокол подій (Клієнтський лог)</h3>';
 
-    if (!logsArray || logsArray.length === 0) {
-        logsOutput.innerHTML += '<p>Логи відсутні.</p>';
+    if (!Array.isArray(logsArray) || logsArray.length === 0) {
+        logsOutput.innerHTML += '<p>Логи відсутні або мають некоректний формат.</p>';
         return;
     }
 
-    // Фільтруємо null/undefined та перевіряємо, що це масив
-    if (!Array.isArray(logsArray)) {
-        console.error("Помилка: Логи у LocalStorage не є масивом.");
-        logsOutput.innerHTML += '<p>Помилка: Некоректний формат логів у сховищі.</p>';
-        return;
-    }
-    
+    // Фільтруємо null/undefined елементи
     logsArray = logsArray.filter(log => log !== null && typeof log === 'object');
 
 
     let tableHTML = '<table><thead><tr><th>Подія #</th><th>Тип</th><th>Лок. час</th><th>Повідомлення</th></tr></thead><tbody>';
 
     logsArray.forEach(log => {
-        // ВИПРАВЛЕННЯ: Додано перевірку на log.local_time для уникнення TypeError
+        // *** ВИПРАВЛЕННЯ: Головна перевірка на існування log та log.local_time ***
         if (log && log.local_time) {
             // Очікувані поля: log_type, sequence, local_time, server_time, message
-            // Використовуємо повний час, оскільки він уже у форматі "HH:MM:SS.ms"
+            // Використовуємо повний час (log.local_time), оскільки він вже у форматі "HH:MM:SS.ms"
             const timeDisplay = log.local_time; 
             
             tableHTML += `<tr>
@@ -245,7 +247,7 @@ function displayLogs() {
         } else {
             // Це обробник для пошкоджених записів, які викликали помилку
             console.warn("Пропущено пошкоджений або неповний запис логу:", log);
-            tableHTML += `<tr><td colspan="4" style="color: red;">[Пошкоджений запис логу]</td></tr>`;
+            tableHTML += `<tr><td colspan="4" style="color: red; font-style: italic;">[Пошкоджений запис логу]</td></tr>`;
         }
     });
 
@@ -314,12 +316,12 @@ reloadButton.addEventListener('click', () => {
 document.addEventListener('DOMContentLoaded', () => {
     const storedLogs = localStorage.getItem('animation_logs');
     if (storedLogs) {
-        // Додамо try-catch на випадок пошкодженого JSON у LocalStorage
+        // *** ЗАХИСТ ВІД ПОШКОДЖЕНОГО JSON ***
         try {
-            localEvents = JSON.parse(storedLogs);
-            // Фільтруємо ініціалізаційні логи, щоб не викликати помилку
-            if (Array.isArray(localEvents)) {
-                localEvents = localEvents.filter(log => log && typeof log.sequence === 'number');
+            const parsedLogs = JSON.parse(storedLogs);
+            if (Array.isArray(parsedLogs)) {
+                // Фільтруємо неповні логи, щоб не викликати помилку
+                localEvents = parsedLogs.filter(log => log && typeof log.sequence === 'number' && log.local_time);
                 eventSequence = localEvents.length;
             } else {
                  localEvents = [];
@@ -329,6 +331,6 @@ document.addEventListener('DOMContentLoaded', () => {
             localEvents = []; // Очищуємо, якщо не вдалося розпарсити
         }
     }
-    // Початкова ініціалізація позицій квадратів, навіть якщо work прихований
+    // Початкова ініціалізація позицій квадратів
     initSquares();
 });
