@@ -1,5 +1,3 @@
-// animation.js
-
 const work = document.getElementById('work');
 const anim = document.getElementById('anim');
 const playButton = document.getElementById('play-button');
@@ -135,7 +133,8 @@ function animate() {
     orangePos.y += orangeVel.y;
 
     // Log кожне зміщення (крок) (пункт h)
-    logEvent('Крок/зміщення квадратів');
+    // Зверніть увагу: це може генерувати дуже багато логів, краще логувати лише зіткнення та зміни стану.
+    // logEvent('Крок/зміщення квадратів'); 
 
     // 2. Дотик до стінок (зміна напрямку) (пункт f)
 
@@ -204,16 +203,13 @@ function animate() {
 /**
  * Зчитування та відображення логів з LocalStorage (Клієнтський лог)
  */
-/**
- * Зчитування та відображення логів з LocalStorage (Клієнтський лог)
- */
 function displayLogs() {
     // 1. Отримання логів з LocalStorage
     const storedLogs = localStorage.getItem('animation_logs');
-
+    
     // Якщо логів немає, перевіряємо, чи є логи в поточному сеансі (localEvents)
-    const logsArray = storedLogs ? JSON.parse(storedLogs) : localEvents;
-
+    let logsArray = storedLogs ? JSON.parse(storedLogs) : localEvents;
+    
     logsOutput.innerHTML = '<h3>Протокол подій (Клієнтський лог)</h3>';
 
     if (!logsArray || logsArray.length === 0) {
@@ -221,15 +217,25 @@ function displayLogs() {
         return;
     }
 
+    // Фільтруємо null/undefined та перевіряємо, що це масив
+    if (!Array.isArray(logsArray)) {
+        console.error("Помилка: Логи у LocalStorage не є масивом.");
+        logsOutput.innerHTML += '<p>Помилка: Некоректний формат логів у сховищі.</p>';
+        return;
+    }
+    
+    logsArray = logsArray.filter(log => log !== null && typeof log === 'object');
+
+
     let tableHTML = '<table><thead><tr><th>Подія #</th><th>Тип</th><th>Лок. час</th><th>Повідомлення</th></tr></thead><tbody>';
 
     logsArray.forEach(log => {
-        // --- ВИПРАВЛЕННЯ: Додаємо перевірку на log та log.local_time ---
+        // ВИПРАВЛЕННЯ: Додано перевірку на log.local_time для уникнення TypeError
         if (log && log.local_time) {
             // Очікувані поля: log_type, sequence, local_time, server_time, message
-            // Якщо local_time має очікуваний формат "HH:MM:SS.ms", то його довжина >= 12
-            const timeDisplay = log.local_time.length >= 23 ? log.local_time.substring(11, 23) : log.local_time;
-
+            // Використовуємо повний час, оскільки він уже у форматі "HH:MM:SS.ms"
+            const timeDisplay = log.local_time; 
+            
             tableHTML += `<tr>
                 <td>${log.sequence}</td>
                 <td>${log.log_type}</td>
@@ -237,13 +243,14 @@ function displayLogs() {
                 <td>${log.message}</td>
             </tr>`;
         } else {
-            // Можна додати запис про пошкоджений лог для діагностики
-             console.warn("Пропущено пошкоджений або неповний запис логу:", log);
+            // Це обробник для пошкоджених записів, які викликали помилку
+            console.warn("Пропущено пошкоджений або неповний запис логу:", log);
+            tableHTML += `<tr><td colspan="4" style="color: red;">[Пошкоджений запис логу]</td></tr>`;
         }
     });
 
     tableHTML += '</tbody></table>';
-    logsOutput.innerHTML += tableHTML; // Змінено на += щоб не перезатирати h3
+    logsOutput.innerHTML += tableHTML;
 }
 
 
@@ -307,10 +314,21 @@ reloadButton.addEventListener('click', () => {
 document.addEventListener('DOMContentLoaded', () => {
     const storedLogs = localStorage.getItem('animation_logs');
     if (storedLogs) {
-        localEvents = JSON.parse(storedLogs);
-        eventSequence = localEvents.length;
+        // Додамо try-catch на випадок пошкодженого JSON у LocalStorage
+        try {
+            localEvents = JSON.parse(storedLogs);
+            // Фільтруємо ініціалізаційні логи, щоб не викликати помилку
+            if (Array.isArray(localEvents)) {
+                localEvents = localEvents.filter(log => log && typeof log.sequence === 'number');
+                eventSequence = localEvents.length;
+            } else {
+                 localEvents = [];
+            }
+        } catch (e) {
+            console.error("Помилка JSON при зчитуванні логів з LocalStorage:", e);
+            localEvents = []; // Очищуємо, якщо не вдалося розпарсити
+        }
     }
     // Початкова ініціалізація позицій квадратів, навіть якщо work прихований
     initSquares();
 });
-
