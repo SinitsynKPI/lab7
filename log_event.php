@@ -1,22 +1,19 @@
-﻿<?php
-// log_event.php - ФІНАЛЬНА ВЕРСІЯ: ЛОГУВАННЯ В БАЗУ ДАНИХ (ПОВНИЙ КОД)
+<?php
+// log_event.php - ФІНАЛЬНА ВЕРСІЯ: ЛОГУВАННЯ У ФАЙЛ (server_events.log)
 
 // =========================================================
-// КОНФІГУРАЦІЯ БАЗИ ДАНИХ (ПЕРЕВІРЕНІ ДАНІ)
+// КОНФІГУРАЦІЯ
 // =========================================================
-define('DB_HOST', 'sql308.byetcluster.com');
-define('DB_NAME', 'if0_40622081_data');
-define('DB_USER', 'if0_40622081');
-define('DB_PASS', '8zLdfDEoLFn');
-$tableName = 'events_log';
+$logFile = 'server_events.log';
 // =========================================================
 
 
 // --- Налаштування середовища та функціонал ---
-ini_set('display_errors', 0); // Вимкнено для коректного повернення JSON
+ini_set('display_errors', 0); 
 ini_set('display_startup_errors', 0);
 error_reporting(E_ALL);
 
+// Усунення проблем з кодуванням (КРИТИЧНО для кирилиці)
 date_default_timezone_set('Europe/Kyiv'); 
 if (function_exists('mb_internal_encoding')) {
     mb_internal_encoding("UTF-8");
@@ -34,75 +31,46 @@ function getServerTime() {
     return date('Y-m-d H:i:s', $timestamp) . '.' . str_pad($milliseconds, 3, '0', STR_PAD_LEFT);
 }
 
-// --- Функція підключення до БД (PDO) ---
-function connectDB() {
-    $dsn = "mysql:host=" . DB_HOST . ";dbname=" . DB_NAME . ";charset=utf8mb4";
-    $options = [
-        PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
-        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-        PDO::ATTR_EMULATE_PREPARES   => false,
-    ];
-    try {
-        $pdo = new PDO($dsn, DB_USER, DB_PASS, $options);
-        return $pdo;
-    } catch (\PDOException $e) {
-        error_log("Database Connection Error: " . $e->getMessage());
-        http_response_code(500); 
-        echo json_encode(['status' => 'error', 'message' => 'DB Connection failed']); 
-        exit;
-    }
+
+// --- Функція запису у файл ---
+function insertLogToFile($logFile, $logType, $sequence, $localTime, $serverTime, $message) {
+    // Формат: LOG_TYPE|SEQUENCE|LOCAL_TIME|SERVER_TIME|MESSAGE\n
+    $logContent = sprintf(
+        "%s|%s|%s|%s|%s\n",
+        $logType,
+        $sequence,
+        $localTime,
+        $serverTime,
+        str_replace(["\n", "\r"], ' ', $message) // Видаляємо переноси рядків з повідомлення
+    );
+    
+    // Запис логу. Використовуємо FILE_APPEND | LOCK_EX для безпечного дозапису
+    return file_put_contents($logFile, $logContent, FILE_APPEND | LOCK_EX);
 }
 
-// --- Функція запису в БД ---
-function insertLog($pdo, $tableName, $logType, $sequence, $localTime, $serverTime, $message) {
-    $sql = "INSERT INTO `{$tableName}` (log_type, sequence, local_time, server_time, message) 
-            VALUES (:log_type, :sequence, :local_time, :server_time, :message)";
-            
-    $stmt = $pdo->prepare($sql);
-    
-    return $stmt->execute([
-        'log_type' => $logType,
-        'sequence' => $sequence,
-        'local_time' => $localTime,
-        'server_time' => $serverTime,
-        'message' => $message
-    ]);
-}
 
 // =========================================================
-// ОБРОБКА GET-ЗАПИТУ: Зчитування логів 
+// ОБРОБКА GET-ЗАПИТУ: Зчитування логів (для відображення)
 // =========================================================
 
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
-    // Важливо: Content-Type: text/plain, оскільки JS його очікує
+    // Важливо: Content-Type: text/plain
     header('Content-Type: text/plain; charset=utf-8'); 
     
+    if (!file_exists($logFile) || filesize($logFile) === 0) {
+        echo ''; // Порожня відповідь, якщо файл не існує
+        exit;
+    }
+    
     try {
-        $pdo = connectDB(); 
-        
-        $stmt = $pdo->query("SELECT log_type, sequence, local_time, server_time, message 
-                              FROM `{$tableName}` 
-                              ORDER BY sequence ASC, created_at ASC");
-        
-        $logOutput = '';
-        
-        while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-            $logOutput .= sprintf(
-                "%s|%s|%s|%s|%s\n",
-                $row['log_type'],
-                $row['sequence'],
-                $row['local_time'],
-                $row['server_time'],
-                str_replace(["\n", "\r"], ' ', $row['message'])
-            );
-        }
-        
+        // Читаємо весь файл
+        $logOutput = file_get_contents($logFile);
         echo $logOutput;
         exit; 
         
     } catch (Exception $e) {
-        error_log("Database Read Error (GET): " . $e->getMessage());
-        echo ''; // Повертаємо порожню відповідь, щоб не зламати JS
+        error_log("File Read Error (GET): " . $e->getMessage());
+        echo ''; 
         exit;
     }
 }
@@ -126,19 +94,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
     
-    $pdo = connectDB();
-    
     try {
         $eventData = urldecode($eventDataEncoded); 
+        $successCount = 0;
         
         if ($logType === 'immediate') {
             $data = json_decode($eventData, true);
 
             if ($data && isset($data['seq']) && isset($data['message'])) {
-                 insertLog(
-                    $pdo, $tableName, 
-                    'IMMEDIATE', $data['seq'], $data['localTime'] ?? 'N/A', $serverTime, $data['message']
+                 insertLogToFile(
+                    $logFile, 'IMMEDIATE', $data['seq'], $data['localTime'] ?? 'N/A', $serverTime, $data['message']
                 );
+                $successCount++;
             } else {
                  throw new Exception("Invalid IMMEDIATE data format.");
             }
@@ -148,10 +115,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (is_array($dataArray) && !empty($dataArray)) {
                 foreach ($dataArray as $data) {
                     if (isset($data['seq']) && isset($data['message'])) {
-                        insertLog(
-                            $pdo, $tableName, 
-                            'FINAL', $data['seq'], $data['localTime'] ?? 'N/A', $serverTime, $data['message']
+                        insertLogToFile(
+                            $logFile, 'FINAL', $data['seq'], $data['localTime'] ?? 'N/A', $serverTime, $data['message']
                         );
+                        $successCount++;
                     }
                 }
             } else {
@@ -159,12 +126,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
         
-        echo json_encode(['status' => 'success', 'serverTime' => $serverTime]);
+        echo json_encode(['status' => 'success', 'serverTime' => $serverTime, 'logs_written' => $successCount]);
         
     } catch (Exception $e) {
         error_log("Log Insert Error: " . $e->getMessage());
         http_response_code(500); 
-        echo json_encode(['status' => 'error', 'message' => 'Server error during logging.']);
+        echo json_encode(['status' => 'error', 'message' => 'Server error during file logging.']);
     }
     
 } else {
