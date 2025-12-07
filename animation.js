@@ -10,27 +10,20 @@ const blueSquare = document.getElementById('blue-square');
 const orangeSquare = document.getElementById('orange-square');
 const logsOutput = document.getElementById('logs-output');
 
-// Параметри анімації
 const SQUARE_SIZE = 15;
 let animationFrameId = null;
 let isAnimating = false;
-let eventSequence = 0; // Порядковий номер події (пункт h)
-const animationInterval = 20; // Часовий проміжок між кроками/зміщеннями (пункт i)
+let eventSequence = 0;
+const animationInterval = 20; 
 
-// Позиції та швидкості
 let bluePos = { x: 0, y: 0 };
 let orangePos = { x: 0, y: 0 };
 let blueVel = { x: 2.2, y: 1.6 };
 let orangeVel = { x: -1.8, y: -1.3 };
 
-// --- ЛОГУВАННЯ ДЛЯ GITHUB PAGES (Тільки LocalStorage) ---
-let localEvents = []; // Акумулятор для LocalStorage
-const MAX_LOG_SIZE = 1500; // Ліміт для уникнення переповнення LocalStorage
-// -------------------------------------------------------------------
+let localEvents = []; 
+const MAX_LOG_SIZE = 1500;
 
-/**
- * Отримання поточного часу з мілісекундами
- */
 function getCurrentTime() {
     const now = new Date();
     const h = String(now.getHours()).padStart(2, '0');
@@ -40,74 +33,53 @@ function getCurrentTime() {
     return `${h}:${m}:${s}.${ms}`;
 }
 
-/**
- * Логує подію безпосередньо у LocalStorage, замінюючи серверне логування.
- */
 function logEvent(message) {
     eventSequence++;
     const localTime = getCurrentTime();
     messageDisplay.textContent = `${eventSequence}: ${message}`;
 
     const logData = {
-        log_type: 'IMMEDIATE', // Всі логи тепер Immediate (клієнтські)
+        log_type: 'IMMEDIATE',
         sequence: eventSequence,
         local_time: localTime,
-        server_time: 'N/A', // Немає доступу до серверного часу
+        server_time: 'N/A',
         message: message,
     };
 
     localEvents.push(logData);
 
-    // Обмеження розміру логу
     if (localEvents.length > MAX_LOG_SIZE) {
-        // Залишаємо лише останні MAX_LOG_SIZE логів
         localEvents = localEvents.slice(localEvents.length - MAX_LOG_SIZE); 
     }
 
-    // Запис у LocalStorage
     try {
         localStorage.setItem('animation_logs', JSON.stringify(localEvents));
     } catch (e) {
         console.error("Помилка LocalStorage при записі логів:", e);
-        // Додамо попередження на екран, якщо сховище переповнене
         messageDisplay.textContent = 'УВАГА: LocalStorage переповнене. Логування призупинено.';
     }
 }
 
-/**
- * Ініціалізація початкових позицій квадратів (пункт f)
- */
 function initSquares() {
     const animRect = anim.getBoundingClientRect();
     const animWidth = animRect.width;
     const animHeight = animRect.height;
-
-    // Перевірка, чи область 'anim' має коректні розміри
     if (animWidth <= 0 || animHeight <= 0) {
-        // Залишаємо попередження, але тепер воно не заблокує ініціалізацію, якщо work ще display: none
         console.warn("Anim area dimensions are zero or invalid. Cannot initialize squares."); 
-        // Якщо work прихований, ці позиції будуть оновлені, коли work стане видимим
         if (work.style.display !== 'block') return;
     }
-
-    // Синій квадрат: біля правої стінки, випадкова вертикальна координата
     bluePos.x = animWidth - SQUARE_SIZE;
     bluePos.y = Math.random() * (animHeight - SQUARE_SIZE);
 
-    // Помаранчевий квадрат: біля нижньої стінки, випадкова горизонтальна координата
     orangePos.y = animHeight - SQUARE_SIZE;
     orangePos.x = Math.random() * (animWidth - SQUARE_SIZE);
 
-    // Встановлюємо початкові позиції
     blueSquare.style.transform = `translate(${bluePos.x}px, ${bluePos.y}px)`;
     orangeSquare.style.transform = `translate(${orangePos.x}px, ${orangePos.y}px)`;
 
     logEvent('Квадрати встановлені на нові стартові позиції');
 }
 
-/**
- * Перевірка зіткнення двох квадратів
- */
 function checkCollision(pos1, pos2) {
     return pos1.x < pos2.x + SQUARE_SIZE &&
         pos1.x + SQUARE_SIZE > pos2.x &&
@@ -115,9 +87,6 @@ function checkCollision(pos1, pos2) {
         pos1.y + SQUARE_SIZE > pos2.y;
 }
 
-/**
- * Основний цикл анімації
- */
 function animate() {
     if (!isAnimating) {
         cancelAnimationFrame(animationFrameId);
@@ -128,18 +97,11 @@ function animate() {
     const animWidth = animRect.width;
     const animHeight = animRect.height;
 
-    // 1. Рух
     bluePos.x += blueVel.x;
     bluePos.y += blueVel.y;
     orangePos.x += orangeVel.x;
     orangePos.y += orangeVel.y;
 
-    // Log кожне зміщення (крок) (пункт h) - закоментовано, щоб уникнути переповнення логу
-    // logEvent('Крок/зміщення квадратів'); 
-
-    // 2. Дотик до стінок (зміна напрямку) (пункт f)
-
-    // Синій квадрат
     if (bluePos.x + SQUARE_SIZE > animWidth) {
         blueVel.x *= -1;
         bluePos.x = animWidth - SQUARE_SIZE;
@@ -159,7 +121,6 @@ function animate() {
         logEvent('Синій квадрат: дотик до верхньої стінки');
     }
 
-    // Помаранчевий квадрат
     if (orangePos.x + SQUARE_SIZE > animWidth) {
         orangeVel.x *= -1;
         orangePos.x = animWidth - SQUARE_SIZE;
@@ -179,36 +140,24 @@ function animate() {
         logEvent('Помаранчевий квадрат: дотик до верхньої стінки');
     }
 
-    // 3. Дотик квадратів між собою (зупинка) (пункт f, g)
     if (checkCollision(bluePos, orangePos)) {
         isAnimating = false;
         logEvent('Квадрати зіткнулися! Анімація зупинена');
-
-        // Зміна кнопок при зіткненні
         stopButton.style.display = 'none';
         startButton.style.display = 'none';
         reloadButton.style.display = 'inline-block';
         return;
     }
 
-    // 4. Оновлення позицій на екрані
     blueSquare.style.transform = `translate(${bluePos.x}px, ${bluePos.y}px)`;
     orangeSquare.style.transform = `translate(${orangePos.x}px, ${orangePos.y}px)`;
 
-    // Рекурсивний виклик через setTimeout для контролю інтервалу (пункт i)
     setTimeout(() => {
         animationFrameId = requestAnimationFrame(animate);
     }, animationInterval);
 }
 
-/**
- * Зчитування та відображення логів з LocalStorage (Клієнтський лог)
- */
-/**
- * Зчитування та відображення логів з LocalStorage (Клієнтський лог)
- */
 function displayLogs() {
-    // 1. Отримання логів з LocalStorage
     const storedLogs = localStorage.getItem('animation_logs');
     
     let logsArray;
@@ -216,7 +165,6 @@ function displayLogs() {
     try {
         logsArray = storedLogs ? JSON.parse(storedLogs) : localEvents;
     } catch (e) {
-        // Обробка пошкодженого JSON
         console.error("Помилка JSON при зчитуванні логів:", e);
         logsArray = localEvents;
     }
@@ -228,16 +176,13 @@ function displayLogs() {
         return;
     }
 
-    // Фільтруємо null/undefined елементи у масиві
     logsArray = logsArray.filter(log => log !== null && typeof log === 'object');
 
 
     let tableHTML = '<table><thead><tr><th>Подія #</th><th>Тип</th><th>Лок. час</th><th>Повідомлення</th></tr></thead><tbody>';
 
     logsArray.forEach(log => {
-        // *** ВИПРАВЛЕННЯ: Додаємо перевірку на log та log.local_time ***
         if (log && log.local_time) {
-            // ВИПРАВЛЕННЯ: Використовуємо повний час, уникаючи помилки substring
             const timeDisplay = log.local_time; 
             
             tableHTML += `<tr>
@@ -247,7 +192,6 @@ function displayLogs() {
                 <td>${log.message}</td>
             </tr>`;
         } else {
-            // Якщо запис пошкоджений, виводимо рядок з попередженням
             console.warn("Пропущено пошкоджений або неповний запис логу:", log);
             tableHTML += `<tr><td colspan="4" style="color: red; font-style: italic;">[Пошкоджений запис логу]</td></tr>`;
         }
@@ -257,29 +201,22 @@ function displayLogs() {
     logsOutput.innerHTML += tableHTML;
 }
 
-// --- Обробники кнопок ---
-
-// Кнопка 'play' (пункт d)
 playButton.addEventListener('click', () => {
     work.style.display = 'block';
-    // Ініціалізація, якщо квадрати ще не були встановлені або анімація зупинена
     if (!isAnimating && startButton.style.display !== 'none' && reloadButton.style.display === 'none') {
         initSquares();
     }
     logEvent('Натиснута кнопка "play"');
 });
 
-// Кнопка 'close' (пункт d, h)
 closeButton.addEventListener('click', () => {
     work.style.display = 'none';
     isAnimating = false;
     cancelAnimationFrame(animationFrameId);
 
-    // Відображення логів
     displayLogs();
 });
 
-// Кнопка 'start' (пункт g)
 startButton.addEventListener('click', () => {
     if (!isAnimating) {
         isAnimating = true;
@@ -289,8 +226,6 @@ startButton.addEventListener('click', () => {
         stopButton.style.display = 'inline-block';
     }
 });
-
-// Кнопка 'stop' (пункт g)
 stopButton.addEventListener('click', () => {
     if (isAnimating) {
         isAnimating = false;
@@ -301,27 +236,21 @@ stopButton.addEventListener('click', () => {
     }
 });
 
-// Кнопка 'reload' (пункт g)
 reloadButton.addEventListener('click', () => {
-    initSquares(); // Встановлення на нові стартові позиції
+    initSquares(); 
     isAnimating = false;
     logEvent('Натиснута кнопка "reload". Квадрати скинуто');
 
-    // Кнопки: reload зникає, start з'являється
     reloadButton.style.display = 'none';
     startButton.style.display = 'inline-block';
     stopButton.style.display = 'none';
 });
-
-// Ініціалізація при завантаженні: завантаження логів з LS та початкова установка
 document.addEventListener('DOMContentLoaded', () => {
     const storedLogs = localStorage.getItem('animation_logs');
     if (storedLogs) {
-        // *** ЗАХИСТ ВІД ПОШКОДЖЕНОГО JSON ***
         try {
             const parsedLogs = JSON.parse(storedLogs);
             if (Array.isArray(parsedLogs)) {
-                // Фільтруємо неповні логи, щоб не викликати помилку
                 localEvents = parsedLogs.filter(log => log && typeof log.sequence === 'number' && log.local_time);
                 eventSequence = localEvents.length;
             } else {
@@ -329,10 +258,10 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         } catch (e) {
             console.error("Помилка JSON при зчитуванні логів з LocalStorage:", e);
-            localEvents = []; // Очищуємо, якщо не вдалося розпарсити
+            localEvents = []; 
         }
     }
-    // Початкова ініціалізація позицій квадратів
     initSquares();
 });
+
 
